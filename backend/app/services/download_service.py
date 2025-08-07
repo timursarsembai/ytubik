@@ -202,6 +202,78 @@ class DownloadService:
         
         return downloads, total
 
+    def cleanup_user_downloads(self, client_ip: str) -> int:
+        """Удаляет все загрузки конкретного пользователя"""
+        user_downloads = self.db.query(Download).filter(
+            Download.client_ip == client_ip
+        ).all()
+        
+        count = 0
+        for download in user_downloads:
+            # Удаляем файл если существует
+            if download.file_path and os.path.exists(download.file_path):
+                try:
+                    os.remove(download.file_path)
+                    logger.info("Удален пользовательский файл", 
+                               file_path=download.file_path, 
+                               client_ip=client_ip)
+                except Exception as e:
+                    logger.error("Ошибка удаления пользовательского файла", 
+                                file_path=download.file_path, 
+                                client_ip=client_ip,
+                                error=str(e))
+            
+            # Обновляем статус
+            download.status = DownloadStatus.EXPIRED
+            count += 1
+        
+        self.db.commit()
+        
+        if count > 0:
+            logger.info("Очищены пользовательские загрузки", 
+                       count=count, 
+                       client_ip=client_ip)
+        
+        return count
+
+    def cleanup_downloads_by_time(self, hours: int = 1) -> int:
+        """Удаляет загрузки старше указанного времени"""
+        time_threshold = datetime.utcnow() - timedelta(hours=hours)
+        
+        expired_downloads = self.db.query(Download).filter(
+            and_(
+                Download.created_at < time_threshold,
+                Download.status == DownloadStatus.COMPLETED
+            )
+        ).all()
+        
+        count = 0
+        for download in expired_downloads:
+            # Удаляем файл если существует
+            if download.file_path and os.path.exists(download.file_path):
+                try:
+                    os.remove(download.file_path)
+                    logger.info("Удален файл по времени", 
+                               file_path=download.file_path,
+                               age_hours=hours)
+                except Exception as e:
+                    logger.error("Ошибка удаления файла по времени", 
+                                file_path=download.file_path, 
+                                error=str(e))
+            
+            # Обновляем статус
+            download.status = DownloadStatus.EXPIRED
+            count += 1
+        
+        self.db.commit()
+        
+        if count > 0:
+            logger.info("Очищены загрузки по времени", 
+                       count=count, 
+                       hours=hours)
+        
+        return count
+
     def cleanup_expired_downloads(self) -> int:
         """Удаляет истекшие загрузки"""
         expired_downloads = self.db.query(Download).filter(

@@ -203,3 +203,24 @@ def cleanup_expired_files():
     
     finally:
         db.close()
+
+@celery_app.task
+def cleanup_expired_files_by_time():
+    """Периодическая задача очистки файлов по времени (1 час)"""
+    db = SessionLocal()
+    download_service = DownloadService(db)
+    
+    try:
+        # Очищаем файлы старше 1 часа
+        cleaned_count = download_service.cleanup_downloads_by_time(hours=settings.USER_FILE_RETENTION_HOURS)
+        logger.info("Выполнена очистка файлов по времени", 
+                   cleaned_count=cleaned_count, 
+                   hours=settings.USER_FILE_RETENTION_HOURS)
+        return {'cleaned_files': cleaned_count, 'hours': settings.USER_FILE_RETENTION_HOURS}
+    
+    except Exception as e:
+        logger.error("Ошибка очистки файлов по времени", error=str(e))
+        return {'error': str(e)}
+    
+    finally:
+        db.close()

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DOWNLOAD_DIR: str = os.path.abspath("../downloads")
     MAX_FILE_SIZE_MB: int = 500
     FILE_RETENTION_HOURS: int = 24
+    USER_FILE_RETENTION_HOURS: int = 1  # Время жизни пользовательских файлов
     
     # Rate limiting
     RATE_LIMIT_DOWNLOADS_PER_HOUR: int = 50

@@ -92,35 +92,56 @@ const SeparatedDownloadHistory: React.FC = () => {
     }
   );
 
-  // Очистка при закрытии страницы - ОТКЛЮЧЕНА для предотвращения потери файлов
+  // Автоматическая очистка при закрытии браузера/вкладки
   useEffect(() => {
-    // Комментируем автоочистку, так как она слишком агрессивная
-    // и удаляет файлы при обычном обновлении страницы
-    
-    // const handleBeforeUnload = async () => {
-    //   try {
-    //     await fetch('/api/downloads/cleanup', {
-    //       method: 'POST',
-    //       headers: {
-    //         'Content-Type': 'application/json',
-    //       },
-    //     });
-    //   } catch (error) {
-    //     console.error('Error cleaning up downloads:', error);
-    //   }
-    // };
+    const handleBeforeUnload = async (event: BeforeUnloadEvent) => {
+      try {
+        // Используем fetch для основной попытки
+        await fetch('/api/downloads/cleanup-user', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (error) {
+        console.error('Error cleaning up downloads on beforeunload:', error);
+      }
+    };
 
-    // const handleUnload = () => {
-    //   navigator.sendBeacon('/api/downloads/cleanup', JSON.stringify({}));
-    // };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Используем sendBeacon как надежный способ для мобильных устройств
+        try {
+          const success = navigator.sendBeacon('/api/downloads/cleanup-user', '');
+          if (!success) {
+            // Fallback если sendBeacon не сработал
+            fetch('/api/downloads/cleanup-user', {
+              method: 'DELETE',
+              keepalive: true
+            }).catch(err => console.error('Cleanup fallback failed:', err));
+          }
+        } catch (error) {
+          console.error('Error cleaning up downloads on visibility change:', error);
+        }
+      }
+    };
 
-    // window.addEventListener('beforeunload', handleBeforeUnload);
-    // window.addEventListener('unload', handleUnload);
+    const handleUnload = () => {
+      // Последняя попытка через sendBeacon
+      navigator.sendBeacon('/api/downloads/cleanup-user', JSON.stringify({}));
+    };
 
-    // return () => {
-    //   window.removeEventListener('beforeunload', handleBeforeUnload);
-    //   window.removeEventListener('unload', handleUnload);
-    // };
+    // Добавляем обработчики событий
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Очистка обработчиков при размонтировании компонента
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const getStatusColor = (status: string) => {

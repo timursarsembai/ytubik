@@ -161,41 +161,37 @@ async def cleanup_user_downloads(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Очищает загрузки пользователя при закрытии браузера"""
+    """Очищает все загрузки пользователя при закрытии браузера"""
     
     client_ip = get_client_ip(request)
     download_service = DownloadService(db)
     
     try:
-        # Получаем все завершенные загрузки пользователя
-        user_downloads, _ = download_service.get_user_downloads(
-            client_ip=client_ip,
-            page=1,
-            per_page=1000  # Получаем все
-        )
+        cleaned_count = download_service.cleanup_user_downloads(client_ip)
         
-        cleaned_count = 0
-        for download in user_downloads:
-            if download.status == DownloadStatus.COMPLETED and download.file_path:
-                # Удаляем файл
-                if os.path.exists(download.file_path):
-                    try:
-                        os.remove(download.file_path)
-                        logger.info("Удален файл пользователя", 
-                                  file_path=download.file_path,
-                                  client_ip=client_ip)
-                        cleaned_count += 1
-                    except Exception as e:
-                        logger.error("Ошибка удаления файла пользователя", 
-                                   file_path=download.file_path, 
-                                   error=str(e))
-                
-                # Обновляем статус на expired
-                download.status = DownloadStatus.EXPIRED
-                download.file_path = None
-                download.file_name = None
+        return {
+            'message': f'Очищено {cleaned_count} файлов',
+            'cleaned_count': cleaned_count
+        }
         
-        db.commit()
+    except Exception as e:
+        logger.error("Ошибка очистки пользовательских загрузок", 
+                    client_ip=client_ip, 
+                    error=str(e))
+        raise HTTPException(status_code=500, detail="Ошибка очистки данных")
+
+@router.delete("/downloads/cleanup-user")
+async def cleanup_user_downloads_delete(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """DELETE эндпоинт для очистки всех загрузок пользователя"""
+    
+    client_ip = get_client_ip(request)
+    download_service = DownloadService(db)
+    
+    try:
+        cleaned_count = download_service.cleanup_user_downloads(client_ip)
         
         return {
             'message': f'Очищено {cleaned_count} файлов',
