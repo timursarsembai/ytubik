@@ -31,5 +31,9 @@ celery_app.conf.update(
             'task': 'app.tasks.download_tasks.cleanup_expired_files',
             'schedule': crontab(hour=2, minute=0),  # Каждый день в 2:00
         },
+        'delete-expired-records': {
+            'task': 'app.tasks.download_tasks.delete_expired_records',
+            'schedule': crontab(minute='*/1'),  # Каждую минуту
+        },
     },
 )

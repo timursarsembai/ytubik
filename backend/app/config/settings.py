@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 500
     FILE_RETENTION_HOURS: int = 24
     USER_FILE_RETENTION_HOURS: int = 1  # Время жизни пользовательских файлов
+    EXPIRED_RECORD_DELETE_MINUTES: int = 1  # Время удаления записей EXPIRED в минутах
     
     # Rate limiting
     RATE_LIMIT_DOWNLOADS_PER_HOUR: int = 50

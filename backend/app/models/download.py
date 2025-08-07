@@ -46,11 +46,13 @@ class Download(Base):
     file_name = Column(String, nullable=True)
     file_size = Column(Float, nullable=True)  # в MB
     
-    # IP адрес для rate limiting
+    # IP адрес для rate limiting и session для разделения пользователей
     client_ip = Column(String, nullable=True)
+    session_id = Column(String, nullable=True)  # Уникальный идентификатор сессии пользователя
     
     # Временные метки
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)

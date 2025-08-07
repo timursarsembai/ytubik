@@ -224,3 +224,24 @@ def cleanup_expired_files_by_time():
     
     finally:
         db.close()
+
+@celery_app.task
+def delete_expired_records():
+    """Периодическая задача удаления записей со статусом EXPIRED через заданное время"""
+    db = SessionLocal()
+    download_service = DownloadService(db)
+    
+    try:
+        # Удаляем записи со статусом EXPIRED старше заданного времени
+        deleted_count = download_service.delete_expired_records(minutes_threshold=settings.EXPIRED_RECORD_DELETE_MINUTES)
+        logger.info("Выполнено удаление записей EXPIRED", 
+                   deleted_count=deleted_count, 
+                   minutes_threshold=settings.EXPIRED_RECORD_DELETE_MINUTES)
+        return {'deleted_records': deleted_count, 'minutes_threshold': settings.EXPIRED_RECORD_DELETE_MINUTES}
+    
+    except Exception as e:
+        logger.error("Ошибка удаления записей EXPIRED", error=str(e))
+        return {'error': str(e)}
+    
+    finally:
+        db.close()

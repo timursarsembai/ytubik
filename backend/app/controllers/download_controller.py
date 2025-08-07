@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 import structlog
 import os
 import urllib.parse
+import uuid
+import hashlib
 
 from app.models.database import get_db
 from app.services.download_service import DownloadService
@@ -29,15 +31,49 @@ def get_client_ip(request: Request) -> str:
         return x_forwarded_for.split(',')[0].strip()
     return request.client.host
 
+def get_or_create_session_id(request: Request, response: Response = None) -> str:
+    """Получает или создает уникальный session ID для пользователя"""
+    # Пробуем получить session_id из cookie
+    session_id = request.cookies.get('session_id')
+    
+    if not session_id:
+        # Создаем новый session_id на основе IP + User-Agent + случайного числа
+        client_ip = get_client_ip(request)
+        user_agent = request.headers.get('User-Agent', '')
+        random_part = str(uuid.uuid4())
+        
+        # Создаем hash для уникальности
+        session_data = f"{client_ip}-{user_agent}-{random_part}"
+        session_id = hashlib.md5(session_data.encode()).hexdigest()
+        
+        # Устанавливаем cookie если есть response объект
+        if response:
+            response.set_cookie(
+                key="session_id",
+                value=session_id,
+                max_age=24*60*60,  # 24 часа
+                httponly=True,
+                secure=False,  # True для HTTPS в продакшене
+                samesite="lax"
+            )
+    
+    return session_id
+
+def get_user_identifier(request: Request, response: Response = None) -> str:
+    """Получает уникальный идентификатор пользователя"""
+    return get_or_create_session_id(request, response)
+
 @router.post("/download", response_model=DownloadResponse)
 async def create_download(
     request: DownloadRequest,
     http_request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """Создает новую загрузку видео"""
     
     client_ip = get_client_ip(http_request)
+    session_id = get_user_identifier(http_request, response)
     download_service = DownloadService(db)
     youtube_service = YouTubeService()
     
@@ -74,7 +110,8 @@ async def create_download(
             format_type=request.format,
             quality=request.quality,
             audio_only=request.audio_only,
-            client_ip=client_ip
+            client_ip=client_ip,
+            session_id=session_id
         )
         
         # Обновляем информацию о видео
@@ -159,15 +196,16 @@ async def download_file(download_id: str, db: Session = Depends(get_db)):
 @router.post("/downloads/cleanup")
 async def cleanup_user_downloads(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """Очищает все загрузки пользователя при закрытии браузера"""
     
-    client_ip = get_client_ip(request)
+    session_id = get_user_identifier(request, response)
     download_service = DownloadService(db)
     
     try:
-        cleaned_count = download_service.cleanup_user_downloads(client_ip)
+        cleaned_count = download_service.cleanup_user_downloads(session_id)
         
         return {
             'message': f'Очищено {cleaned_count} файлов',
@@ -176,22 +214,23 @@ async def cleanup_user_downloads(
         
     except Exception as e:
         logger.error("Ошибка очистки пользовательских загрузок", 
-                    client_ip=client_ip, 
+                    session_id=session_id, 
                     error=str(e))
         raise HTTPException(status_code=500, detail="Ошибка очистки данных")
 
 @router.delete("/downloads/cleanup-user")
 async def cleanup_user_downloads_delete(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """DELETE эндпоинт для очистки всех загрузок пользователя"""
     
-    client_ip = get_client_ip(request)
+    session_id = get_user_identifier(request, response)
     download_service = DownloadService(db)
     
     try:
-        cleaned_count = download_service.cleanup_user_downloads(client_ip)
+        cleaned_count = download_service.cleanup_user_downloads(session_id)
         
         return {
             'message': f'Очищено {cleaned_count} файлов',
@@ -200,7 +239,7 @@ async def cleanup_user_downloads_delete(
         
     except Exception as e:
         logger.error("Ошибка очистки пользовательских загрузок", 
-                    client_ip=client_ip, 
+                    session_id=session_id, 
                     error=str(e))
         raise HTTPException(status_code=500, detail="Ошибка очистки данных")
 
@@ -241,6 +280,7 @@ async def get_my_downloads(
     page: int = 1,
     per_page: int = 20,
     request: Request = None,
+    response: Response = None,
     db: Session = Depends(get_db)
 ):
     """Получает загрузки текущего пользователя с полной информацией"""
@@ -248,11 +288,11 @@ async def get_my_downloads(
     if per_page > 100:
         per_page = 100
     
-    client_ip = get_client_ip(request) if request else None
+    session_id = get_user_identifier(request, response) if request else None
     download_service = DownloadService(db)
     
     downloads, total = download_service.get_user_downloads(
-        client_ip=client_ip,
+        session_id=session_id,
         page=page, 
         per_page=per_page
     )
@@ -297,7 +337,8 @@ async def get_downloads_history(
     page: int = 1,
     per_page: int = 20,
     request: Request = None,
+    response: Response = None,
     db: Session = Depends(get_db)
 ):
     """Получает историю загрузок (deprecated - используйте /downloads/my)"""
-    return await get_my_downloads(page, per_page, request, db)
+    return await get_my_downloads(page, per_page, request, response, db)

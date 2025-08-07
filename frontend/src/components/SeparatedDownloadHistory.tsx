@@ -16,7 +16,7 @@ import {
   Pagination,
   Grid
 } from '@mui/material';
-import { Refresh, GetApp } from '@mui/icons-material';
+import { GetApp } from '@mui/icons-material';
 import { useQuery } from 'react-query';
 
 interface GlobalActivity {
@@ -60,12 +60,13 @@ const SeparatedDownloadHistory: React.FC = () => {
   const { 
     data: globalData, 
     isLoading: globalLoading, 
-    error: globalError, 
-    refetch: refetchGlobal 
+    error: globalError
   } = useQuery<GlobalActivityResponse, Error>(
     ['global-activity', globalPage],
     async () => {
-      const response = await fetch(`/api/downloads/global?page=${globalPage}&per_page=${perPage}`);
+      const response = await fetch(`/api/downloads/global?page=${globalPage}&per_page=${perPage}`, {
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch global activity');
       return response.json();
     },
@@ -78,12 +79,13 @@ const SeparatedDownloadHistory: React.FC = () => {
   const { 
     data: myData, 
     isLoading: myLoading, 
-    error: myError, 
-    refetch: refetchMy 
+    error: myError
   } = useQuery<MyDownloadsResponse, Error>(
     ['my-downloads', myPage],
     async () => {
-      const response = await fetch(`/api/downloads/my?page=${myPage}&per_page=${perPage}`);
+      const response = await fetch(`/api/downloads/my?page=${myPage}&per_page=${perPage}`, {
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch my downloads');
       return response.json();
     },
@@ -102,6 +104,7 @@ const SeparatedDownloadHistory: React.FC = () => {
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include'
         });
       } catch (error) {
         console.error('Error cleaning up downloads on beforeunload:', error);
@@ -117,7 +120,8 @@ const SeparatedDownloadHistory: React.FC = () => {
             // Fallback если sendBeacon не сработал
             fetch('/api/downloads/cleanup-user', {
               method: 'DELETE',
-              keepalive: true
+              keepalive: true,
+              credentials: 'include'
             }).catch(err => console.error('Cleanup fallback failed:', err));
           }
         } catch (error) {
@@ -178,26 +182,6 @@ const SeparatedDownloadHistory: React.FC = () => {
     }
   };
 
-  const handleManualCleanup = async () => {
-    try {
-      const response = await fetch('/api/downloads/cleanup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        alert(`Очищено ${result.cleaned_count} файлов`);
-        refetchMy(); // Обновляем список
-      }
-    } catch (error) {
-      console.error('Error cleaning up downloads:', error);
-      alert('Ошибка при очистке файлов');
-    }
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('ru-RU');
   };
@@ -208,7 +192,9 @@ const SeparatedDownloadHistory: React.FC = () => {
       const fullUrl = url.startsWith('http') ? url : `http://localhost:8000${url}`;
       
       // Используем fetch для получения файла
-      const response = await fetch(fullUrl);
+      const response = await fetch(fullUrl, {
+        credentials: 'include'
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -257,25 +243,6 @@ const SeparatedDownloadHistory: React.FC = () => {
               <Typography variant="h6" component="h2">
                 📁 Мои загрузки
               </Typography>
-              <Box display="flex" gap={1}>
-                <Button
-                  startIcon={<Refresh />}
-                  onClick={() => refetchMy()}
-                  disabled={myLoading}
-                  size="small"
-                >
-                  Обновить
-                </Button>
-                <Button
-                  onClick={handleManualCleanup}
-                  disabled={myLoading}
-                  size="small"
-                  color="warning"
-                  variant="outlined"
-                >
-                  Очистить файлы
-                </Button>
-              </Box>
             </Box>
 
             {myError && (
@@ -385,13 +352,6 @@ const SeparatedDownloadHistory: React.FC = () => {
               <Typography variant="h6" component="h2">
                 🌍 Глобальная активность
               </Typography>
-              <Button
-                startIcon={<Refresh />}
-                onClick={() => refetchGlobal()}
-                disabled={globalLoading}
-              >
-                Обновить
-              </Button>
             </Box>
 
             {globalError && (

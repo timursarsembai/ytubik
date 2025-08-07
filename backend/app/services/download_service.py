@@ -23,7 +23,8 @@ class DownloadService:
                        format_type: str,
                        quality: str,
                        audio_only: bool,
-                       client_ip: str) -> Download:
+                       client_ip: str,
+                       session_id: str) -> Download:
         """Создает новую запись загрузки"""
         
         download = Download(
@@ -33,6 +34,7 @@ class DownloadService:
             quality=quality,
             audio_only=audio_only,
             client_ip=client_ip,
+            session_id=session_id,
             status=DownloadStatus.PENDING,
             expires_at=datetime.utcnow() + timedelta(hours=settings.FILE_RETENTION_HOURS)
         )
@@ -44,7 +46,8 @@ class DownloadService:
         logger.info("Создана новая загрузка", 
                    download_id=download.id,
                    video_id=video_id,
-                   client_ip=client_ip)
+                   client_ip=client_ip,
+                   session_id=session_id)
         
         return download
     
@@ -187,11 +190,11 @@ class DownloadService:
         return downloads, total
     
     def get_user_downloads(self, 
-                          client_ip: str,
+                          session_id: str,
                           page: int = 1, 
                           per_page: int = 20) -> tuple[List[Download], int]:
-        """Получает загрузки конкретного пользователя"""
-        query = self.db.query(Download).filter(Download.client_ip == client_ip)
+        """Получает загрузки конкретного пользователя по session_id"""
+        query = self.db.query(Download).filter(Download.session_id == session_id)
         
         total = query.count()
         
@@ -202,10 +205,10 @@ class DownloadService:
         
         return downloads, total
 
-    def cleanup_user_downloads(self, client_ip: str) -> int:
-        """Удаляет все загрузки конкретного пользователя"""
+    def cleanup_user_downloads(self, session_id: str) -> int:
+        """Удаляет все загрузки конкретного пользователя по session_id"""
         user_downloads = self.db.query(Download).filter(
-            Download.client_ip == client_ip
+            Download.session_id == session_id
         ).all()
         
         count = 0
@@ -216,11 +219,11 @@ class DownloadService:
                     os.remove(download.file_path)
                     logger.info("Удален пользовательский файл", 
                                file_path=download.file_path, 
-                               client_ip=client_ip)
+                               session_id=session_id)
                 except Exception as e:
                     logger.error("Ошибка удаления пользовательского файла", 
                                 file_path=download.file_path, 
-                                client_ip=client_ip,
+                                session_id=session_id,
                                 error=str(e))
             
             # Обновляем статус
@@ -232,7 +235,7 @@ class DownloadService:
         if count > 0:
             logger.info("Очищены пользовательские загрузки", 
                        count=count, 
-                       client_ip=client_ip)
+                       session_id=session_id)
         
         return count
 
@@ -298,5 +301,37 @@ class DownloadService:
         
         if count > 0:
             logger.info("Очищены истекшие загрузки", count=count)
+        
+        return count
+
+    def delete_expired_records(self, minutes_threshold: int = 1) -> int:
+        """Удаляет записи со статусом EXPIRED, которые находятся в этом статусе дольше указанного времени"""
+        from datetime import datetime, timedelta
+        
+        threshold_time = datetime.utcnow() - timedelta(minutes=minutes_threshold)
+        
+        expired_records = self.db.query(Download).filter(
+            Download.status == DownloadStatus.EXPIRED,
+            Download.updated_at < threshold_time
+        ).all()
+        
+        count = 0
+        for download in expired_records:
+            # Окончательно удаляем файл если ещё существует
+            if download.file_path and os.path.exists(download.file_path):
+                try:
+                    os.remove(download.file_path)
+                    logger.info("Удален файл при удалении записи", file_path=download.file_path)
+                except Exception as e:
+                    logger.error("Ошибка удаления файла при удалении записи", file_path=download.file_path, error=str(e))
+            
+            # Удаляем запись из базы данных
+            self.db.delete(download)
+            count += 1
+        
+        self.db.commit()
+        
+        if count > 0:
+            logger.info("Удалены записи со статусом EXPIRED", count=count, minutes_threshold=minutes_threshold)
         
         return count
