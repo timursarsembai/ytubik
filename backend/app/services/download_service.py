@@ -171,6 +171,37 @@ class DownloadService:
             'daily_limit': settings.RATE_LIMIT_DOWNLOADS_PER_DAY
         }
     
+    def get_global_activity(self, 
+                           page: int = 1, 
+                           per_page: int = 20) -> tuple[List[Download], int]:
+        """Получает глобальную активность всех пользователей"""
+        query = self.db.query(Download)
+        
+        total = query.count()
+        
+        downloads = query.order_by(desc(Download.created_at))\
+                        .offset((page - 1) * per_page)\
+                        .limit(per_page)\
+                        .all()
+        
+        return downloads, total
+    
+    def get_user_downloads(self, 
+                          client_ip: str,
+                          page: int = 1, 
+                          per_page: int = 20) -> tuple[List[Download], int]:
+        """Получает загрузки конкретного пользователя"""
+        query = self.db.query(Download).filter(Download.client_ip == client_ip)
+        
+        total = query.count()
+        
+        downloads = query.order_by(desc(Download.created_at))\
+                        .offset((page - 1) * per_page)\
+                        .limit(per_page)\
+                        .all()
+        
+        return downloads, total
+
     def cleanup_expired_downloads(self) -> int:
         """Удаляет истекшие загрузки"""
         expired_downloads = self.db.query(Download).filter(

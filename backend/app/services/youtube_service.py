@@ -18,23 +18,34 @@ class YouTubeService:
             'no_warnings': True,
             'extractaudio': False,
             'skip_download': True,
-            # Добавляем настройки для обхода блокировок
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            # Улучшенные настройки для обхода блокировок YouTube 2025
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'headers': {
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1',
             },
             # Используем cookies для лучшей совместимости
             'cookiefile': None,
-            # Включаем экстракторы для лучшей поддержки
+            # Новые настройки экстрактора для 2025
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web'],
+                    'player_client': ['web', 'android', 'ios'],
                     'skip': ['dash'],
+                    'player_skip': ['configs'],
                 }
             },
+            # Дополнительные настройки
+            'http_chunk_size': 10485760,  # 10MB chunks
+            'retries': 3,
+            'fragment_retries': 3,
+            'socket_timeout': 30,
         }
     
     def extract_video_id(self, url: str) -> str:
@@ -113,25 +124,34 @@ class YouTubeService:
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
-            # Добавляем те же настройки для обхода блокировок
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            # Улучшенные настройки для обхода блокировок YouTube 2025
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
             'headers': {
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1',
             },
             'cookiefile': None,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web'],
+                    'player_client': ['web', 'android', 'ios'],
                     'skip': ['dash'],
+                    'player_skip': ['configs'],
                 }
             },
             # Дополнительные настройки для стабильности
-            'retries': 3,
-            'fragment_retries': 3,
+            'http_chunk_size': 10485760,  # 10MB chunks
+            'retries': 5,
+            'fragment_retries': 5,
             'socket_timeout': 30,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
         }
         
         if audio_only:
@@ -169,22 +189,26 @@ class YouTubeService:
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
-            # Используем Android клиент - часто работает лучше
+            # Используем Android клиент - часто работает лучше для обхода блокировок
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
+                    'player_client': ['android', 'web'],
                     'skip': ['dash'],
+                    'player_skip': ['configs'],
                 }
             },
-            'user_agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
+            'user_agent': 'com.google.android.youtube/18.11.34 (Linux; U; Android 12; en_US)',
             'headers': {
-                'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
+                'User-Agent': 'com.google.android.youtube/18.11.34 (Linux; U; Android 12; en_US)',
                 'X-YouTube-Client-Name': '3',
-                'X-YouTube-Client-Version': '17.31.35',
+                'X-YouTube-Client-Version': '18.11.34',
             },
-            'retries': 5,
-            'fragment_retries': 5,
+            'http_chunk_size': 10485760,  # 10MB chunks
+            'retries': 10,
+            'fragment_retries': 10,
             'socket_timeout': 30,
+            'sleep_interval': 2,
+            'max_sleep_interval': 10,
         }
         
         if audio_only:

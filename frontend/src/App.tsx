@@ -2,7 +2,7 @@ import React from 'react';
 import { Container, AppBar, Toolbar, Typography, Box } from '@mui/material';
 import { VideoLibrary } from '@mui/icons-material';
 import DownloadForm from './components/DownloadForm';
-import DownloadHistory from './components/DownloadHistory';
+import SeparatedDownloadHistory from './components/SeparatedDownloadHistory';
 
 function App() {
   return (
@@ -16,13 +16,13 @@ function App() {
         </Toolbar>
       </AppBar>
       
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 4 }}>
           <DownloadForm />
         </Box>
         
         <Box>
-          <DownloadHistory />
+          <SeparatedDownloadHistory />
         </Box>
       </Container>
     </div>

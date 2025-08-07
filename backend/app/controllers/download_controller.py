@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import structlog
 import os
+import urllib.parse
 
 from app.models.database import get_db
 from app.services.download_service import DownloadService
@@ -114,7 +115,7 @@ async def get_download_status(download_id: str, db: Session = Depends(get_db)):
     
     download_url = None
     if download.status == DownloadStatus.COMPLETED and download.file_name:
-        download_url = f"/downloads/{download.file_name}"
+        download_url = f"/api/download/{download.id}/file"
     
     return DownloadStatusSchema(
         id=download.id,
@@ -141,20 +142,112 @@ async def download_file(download_id: str, db: Session = Depends(get_db)):
     if not download.file_path or not os.path.exists(download.file_path):
         raise HTTPException(status_code=404, detail="Файл не найден")
     
+    # Кодируем имя файла для поддержки нелатинских символов
+    encoded_filename = urllib.parse.quote(download.file_name.encode('utf-8'))
+    
     return FileResponse(
         path=download.file_path,
         filename=download.file_name,
-        media_type='application/octet-stream'
+        media_type='application/octet-stream',
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+            "Cache-Control": "no-cache"
+        }
     )
 
-@router.get("/downloads", response_model=DownloadHistory)
-async def get_downloads_history(
+@router.post("/downloads/cleanup")
+async def cleanup_user_downloads(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Очищает загрузки пользователя при закрытии браузера"""
+    
+    client_ip = get_client_ip(request)
+    download_service = DownloadService(db)
+    
+    try:
+        # Получаем все завершенные загрузки пользователя
+        user_downloads, _ = download_service.get_user_downloads(
+            client_ip=client_ip,
+            page=1,
+            per_page=1000  # Получаем все
+        )
+        
+        cleaned_count = 0
+        for download in user_downloads:
+            if download.status == DownloadStatus.COMPLETED and download.file_path:
+                # Удаляем файл
+                if os.path.exists(download.file_path):
+                    try:
+                        os.remove(download.file_path)
+                        logger.info("Удален файл пользователя", 
+                                  file_path=download.file_path,
+                                  client_ip=client_ip)
+                        cleaned_count += 1
+                    except Exception as e:
+                        logger.error("Ошибка удаления файла пользователя", 
+                                   file_path=download.file_path, 
+                                   error=str(e))
+                
+                # Обновляем статус на expired
+                download.status = DownloadStatus.EXPIRED
+                download.file_path = None
+                download.file_name = None
+        
+        db.commit()
+        
+        return {
+            'message': f'Очищено {cleaned_count} файлов',
+            'cleaned_count': cleaned_count
+        }
+        
+    except Exception as e:
+        logger.error("Ошибка очистки пользовательских загрузок", 
+                    client_ip=client_ip, 
+                    error=str(e))
+        raise HTTPException(status_code=500, detail="Ошибка очистки данных")
+
+@router.get("/downloads/global", response_model=dict)
+async def get_global_activity(
+    page: int = 1,
+    per_page: int = 20,
+    db: Session = Depends(get_db)
+):
+    """Получает глобальную активность всех пользователей (только название и дата)"""
+    
+    if per_page > 100:
+        per_page = 100
+    
+    download_service = DownloadService(db)
+    
+    downloads, total = download_service.get_global_activity(
+        page=page, 
+        per_page=per_page
+    )
+    
+    activity_items = []
+    for download in downloads:
+        activity_items.append({
+            'video_title': download.video_title or 'Обработка...',
+            'created_at': download.created_at
+        })
+    
+    return {
+        'activity': activity_items,
+        'total': total,
+        'page': page,
+        'per_page': per_page
+    }
+
+@router.get("/downloads/my", response_model=DownloadHistory)
+async def get_my_downloads(
     page: int = 1,
     per_page: int = 20,
     request: Request = None,
     db: Session = Depends(get_db)
 ):
-    """Получает историю загрузок"""
+    """Получает загрузки текущего пользователя с полной информацией"""
     
     if per_page > 100:
         per_page = 100
@@ -162,10 +255,10 @@ async def get_downloads_history(
     client_ip = get_client_ip(request) if request else None
     download_service = DownloadService(db)
     
-    downloads, total = download_service.get_downloads_history(
+    downloads, total = download_service.get_user_downloads(
+        client_ip=client_ip,
         page=page, 
-        per_page=per_page,
-        client_ip=client_ip
+        per_page=per_page
     )
     
     download_responses = []
@@ -185,7 +278,7 @@ async def get_downloads_history(
         
         download_url = None
         if download.status == DownloadStatus.COMPLETED and download.file_name:
-            download_url = f"/downloads/{download.file_name}"
+            download_url = f"/api/download/{download.id}/file"
         
         download_responses.append(DownloadResponse(
             id=download.id,
@@ -202,3 +295,13 @@ async def get_downloads_history(
         page=page,
         per_page=per_page
     )
+
+@router.get("/downloads", response_model=DownloadHistory)
+async def get_downloads_history(
+    page: int = 1,
+    per_page: int = 20,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Получает историю загрузок (deprecated - используйте /downloads/my)"""
+    return await get_my_downloads(page, per_page, request, db)
