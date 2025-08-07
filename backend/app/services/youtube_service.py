@@ -56,6 +56,9 @@ class YouTubeService:
             elif 'youtube.com/watch' in url:
                 parsed = urlparse(url)
                 return parse_qs(parsed.query)['v'][0]
+            elif 'youtube.com/shorts/' in url:
+                # Поддержка YouTube Shorts
+                return url.split('youtube.com/shorts/')[-1].split('?')[0]
             else:
                 raise ValueError("Неверный формат YouTube URL")
         except Exception as e:
