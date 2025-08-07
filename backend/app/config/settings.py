@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # База данных
-    DATABASE_URL: str = "sqlite:///./youtube_downloader.db"
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./youtube_downloader.db")
     
     # Redis и Celery
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -37,11 +37,15 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:8000", 
-        "https://saveforme.sarsembai.com"
+        "https://ytubik.sarsembai.com",
+        "http://ytubik.sarsembai.com"
     ]
     
     # Безопасность
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    
+    # Домен для продакшна
+    DOMAIN: str = os.getenv("DOMAIN", "localhost")
     
     class Config:
         env_file = ".env"

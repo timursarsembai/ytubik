@@ -1,28 +1,103 @@
-version: "3.8"
+version: '3.8'
 
-# Production overrides
 services:
-  backend:
+  # Redis для кеширования и очередей
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app-network
+
+  # PostgreSQL база данных (для продакшна лучше чем SQLite)
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: ytubik
+      POSTGRES_USER: ytubik_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  # Backend API
+  backend:
+    build: .
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=production
-      - DEBUG=false
-    restart: always
-    command: gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+      - SECRET_KEY=${SECRET_KEY}
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
 
-  celery-worker:
-    restart: always
+  # Celery Worker для фоновых задач
+  celery_worker:
+    build: .
+    restart: unless-stopped
+    command: celery -A main.celery worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
 
+  # Celery Beat для периодических задач
+  celery_beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A main.celery beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - db
+    networks:
+      - app-network
+
+  # Frontend
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    restart: always
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
 
-  nginx:
-    restart: always
+networks:
+  app-network:
+    driver: bridge
 
-  redis:
-    restart: always
-
-  postgres:
-    restart: always
+volumes:
+  postgres_data:
+  redis_data:
