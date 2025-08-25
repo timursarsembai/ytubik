@@ -31,4 +31,5 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # Запускаем приложение
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Запускаем приложение (корректный модуль app.main:app)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

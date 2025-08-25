@@ -28,12 +28,13 @@ services:
   backend:
     build: .
     restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
-      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=production
-      - SECRET_KEY=${SECRET_KEY}
-      - DOMAIN=${DOMAIN}
+      DATABASE_URL: postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY}
+      DOMAIN: ${DOMAIN}
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
@@ -47,12 +48,12 @@ services:
   celery_worker:
     build: .
     restart: unless-stopped
-    command: celery -A main.celery worker --loglevel=info
+    command: celery -A app.tasks.celery_app worker --loglevel=info
     environment:
-      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=production
-      - SECRET_KEY=${SECRET_KEY}
+      DATABASE_URL: postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
@@ -66,12 +67,12 @@ services:
   celery_beat:
     build: .
     restart: unless-stopped
-    command: celery -A main.celery beat --loglevel=info
+    command: celery -A app.tasks.celery_app beat --loglevel=info
     environment:
-      - DATABASE_URL=postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=production
-      - SECRET_KEY=${SECRET_KEY}
+      DATABASE_URL: postgresql://ytubik_user:${DB_PASSWORD}@db:5432/ytubik
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./downloads:/app/downloads
       - ./logs:/app/logs
@@ -86,6 +87,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        API_BASE_URL: /api
     restart: unless-stopped
     ports:
       - "80:80"
@@ -93,6 +96,10 @@ services:
       - backend
     networks:
       - app-network
+    environment:
+      - API_BASE_PATH=/api
+    volumes:
+      - ./downloads:/var/www/downloads:ro
 
 networks:
   app-network:

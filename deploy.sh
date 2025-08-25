@@ -1,9 +1,9 @@
-# Скрипт для развертывания на сервере
 #!/bin/bash
+# Скрипт production деплоя ytubik
 
 set -e
 
-echo "🚀 Начинаем развертывание YouTube Downloader..."
+echo "🚀 Начинаем развертывание ytubik..."
 
 # Проверяем, что мы в правильной директории
 if [ ! -f "docker-compose.prod.yml" ]; then
@@ -14,42 +14,57 @@ fi
 
 # Проверяем наличие .env файла
 if [ ! -f ".env" ]; then
-    echo "❌ Файл .env не найден!"
-    echo "Скопируйте .env.example в .env и настройте переменные:"
-    echo "cp .env.example .env"
-    echo "nano .env"
-    exit 1
+    echo "⚙️ Создаем .env (не найден)"
+    cat > .env <<EOF
+DOMAIN=ytubik.sarsembai.com
+DB_PASSWORD=$(openssl rand -hex 12)
+SECRET_KEY=$(openssl rand -hex 32)
+EOF
+    echo "✅ Сгенерирован .env"
+fi
+
+# Проверяем наличие обязательных переменных
+source .env
+missing=()
+[ -z "$DOMAIN" ] && missing+=(DOMAIN)
+[ -z "$DB_PASSWORD" ] && missing+=(DB_PASSWORD)
+[ -z "$SECRET_KEY" ] && missing+=(SECRET_KEY)
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "❌ Отсутствуют переменные: ${missing[*]}"; exit 1; fi
+
+# Определяем бинарь docker compose
+if command -v docker &>/dev/null && docker compose version &>/dev/null; then
+    DC="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    DC="docker-compose"
+else
+    echo "❌ Docker Compose не найден"; exit 1
 fi
 
 echo "✅ Останавливаем старые контейнеры..."
-docker-compose -f docker-compose.prod.yml down
+$DC -f docker-compose.prod.yml down || true
 
-echo "✅ Собираем новые образы..."
-docker-compose -f docker-compose.prod.yml build --no-cache
+echo "✅ Собираем/обновляем образы..."
+$DC -f docker-compose.prod.yml build
 
 echo "✅ Запускаем сервисы..."
-docker-compose -f docker-compose.prod.yml up -d
+$DC -f docker-compose.prod.yml up -d --remove-orphans
 
 echo "✅ Ждем запуска сервисов..."
 sleep 30
 
 echo "✅ Проверяем статус сервисов..."
-docker-compose -f docker-compose.prod.yml ps
+$DC -f docker-compose.prod.yml ps
 
-echo "✅ Создаем таблицы в базе данных..."
-docker-compose -f docker-compose.prod.yml exec backend python -c "
-from database import engine, Base
-Base.metadata.create_all(bind=engine)
-print('Database tables created successfully!')
-"
+echo "ℹ️ Пропускаем явное создание таблиц (создаются при старте FastAPI)"
 
 echo "🎉 Развертывание завершено!"
 echo ""
 echo "📊 Проверить статус: docker-compose -f docker-compose.prod.yml ps"
 echo "📋 Посмотреть логи: docker-compose -f docker-compose.prod.yml logs -f"
-echo "🌐 Сайт доступен по адресу: http://ytubik.sarsembai.com"
+echo "🌐 Сайт (HTTP) должен быть доступен: http://$DOMAIN"
 echo ""
 echo "🔧 Полезные команды:"
-echo "- Перезапуск: docker-compose -f docker-compose.prod.yml restart"
-echo "- Остановка: docker-compose -f docker-compose.prod.yml down"
+echo "- Перезапуск: $DC -f docker-compose.prod.yml restart"
+echo "- Остановка: $DC -f docker-compose.prod.yml down"
 echo "- Обновление: git pull && ./deploy.sh"

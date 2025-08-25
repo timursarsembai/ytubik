@@ -1,6 +1,10 @@
 # Dockerfile для frontend
 FROM node:18-alpine
 
+# Аргумент сборки для API base URL
+ARG API_BASE_URL=""
+ENV REACT_APP_API_URL=${API_BASE_URL}
+
 # Создаем рабочую директорию
 WORKDIR /app
 
